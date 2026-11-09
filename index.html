@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>异病侦探 · 好评率监测</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2129; --line:#2a3038;
+    --txt:#e6edf3; --dim:#8b949e; --pos:#3fb950; --neg:#f85149;
+    --accent:#58a6ff; --warn:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  a{color:var(--accent);text-decoration:none}
+  .wrap{max-width:1240px;margin:0 auto;padding:24px 20px 60px}
+
+  header{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;
+    padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  header img{width:150px;border-radius:6px;box-shadow:0 4px 16px #0008}
+  h1{margin:0 0 4px;font-size:22px;font-weight:650;letter-spacing:.2px}
+  .sub{color:var(--dim);font-size:13px}
+  .badge{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;
+    font-weight:600;vertical-align:middle}
+  .b-pos{background:#1b4721;color:#56d364}
+  .b-mid{background:#3d2c0a;color:#e3b341}
+  .b-neg{background:#4a1d1d;color:#ff7b72}
+  .spacer{flex:1}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    padding:8px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:500}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.5;cursor:default}
+
+  .btn-ghost{display:inline-flex;align-items:center;margin-left:8px;
+    padding:8px 16px;border-radius:7px;border:1px solid var(--line);
+    color:#c9d1d9;font-size:13px;font-weight:500;text-decoration:none;background:transparent}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:14px;margin-bottom:24px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px}
+  .kpi .lbl{color:var(--dim);font-size:12px;letter-spacing:.4px;margin-bottom:6px}
+  .kpi .val{font-size:26px;font-weight:670;line-height:1.15;font-variant-numeric:tabular-nums}
+  .kpi .note{color:var(--dim);font-size:12px;margin-top:4px}
+  .up{color:var(--pos)} .down{color:var(--neg)} .flat{color:var(--dim)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;margin-bottom:20px;min-width:0}
+  .card h2{margin:0 0 4px;font-size:15px;font-weight:620}
+  .card .hint{color:var(--dim);font-size:12px;margin-bottom:14px}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .tick{fill:var(--dim);font-size:11px;font-family:inherit}
+  .grid-line{stroke:#232a33;stroke-width:1}
+  .hoverable:hover{opacity:.82}
+
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--dim);margin-top:10px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px}
+  .tier{background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    padding:13px 14px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+  .tier:hover{border-color:var(--accent)}
+  .tier.active{border-color:var(--accent);background:#1b2637}
+  .tier .t{font-size:12px;color:var(--dim)}
+  .tier .r{font-size:21px;font-weight:660;font-variant-numeric:tabular-nums;margin:3px 0 1px}
+  .tier .n{font-size:11px;color:var(--dim)}
+  .tier .bar{height:3px;background:#30363d;border-radius:2px;margin-top:9px;overflow:hidden}
+  .tier .bar i{display:block;height:100%;border-radius:2px}
+
+  .controls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  select,input[type=search]{background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:7px;padding:7px 11px;font-size:13px;
+    font-family:inherit;outline:none}
+  select:focus,input:focus{border-color:var(--accent)}
+  input[type=search]{min-width:210px}
+
+  .rev{border-top:1px solid var(--line);padding:9px 0;display:flex;gap:12px;min-width:0;
+    align-items:baseline}
+  .rev:first-of-type{border-top:none}
+  .rev .v{flex:0 0 46px;font-size:12px;font-weight:600}
+  .rev .body{flex:1;min-width:0}
+  .rev .meta{color:var(--dim);font-size:12px;
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .rev .meta .hrs{color:#c9d1d9;font-variant-numeric:tabular-nums;min-width:66px}
+  .rev .who{color:var(--accent);text-decoration:none;border-bottom:1px dotted #2f4d6f}
+  .rev .who:hover{color:#7fb3ff}
+  .pill{background:#21262d;border-radius:4px;padding:1px 6px;font-size:11px;color:var(--dim)}
+  .empty{color:var(--dim);padding:26px 0;text-align:center;font-size:13px}
+  .foot{color:var(--dim);font-size:12px;text-align:center;margin-top:26px;line-height:1.9}
+  .hm-table{border-collapse:separate;border-spacing:4px;font-size:12px;width:100%}
+  .hm-table th{color:var(--dim);font-weight:500;padding:3px 7px;text-align:center}
+  .hm-table th.hm-row{text-align:left}
+  .hm-row{color:#c9d1d9;white-space:nowrap;padding-right:12px!important;text-align:left}
+  .hm-row span{color:var(--dim);margin-left:6px;font-size:11px}
+  .hm{text-align:center;border-radius:5px;padding:6px 10px;font-variant-numeric:tabular-nums;
+    color:#e6edf3;transition:.12s;cursor:default}
+  .hm:hover{outline:1px solid var(--accent)}
+  .hm-4{background:#1f6f34} .hm-3{background:#2f6b33}
+  .hm-2{background:#6b5d1f} .hm-1{background:#6b4020} .hm-0{background:#6b2424}
+  .hm-empty{background:#12161c;color:#3a4148;text-align:center;border-radius:5px;padding:6px 10px}
+  .hm-note{color:var(--dim);font-size:11.5px;margin-top:10px}
+  .toast{position:fixed;right:20px;bottom:20px;background:var(--panel2);
+    border:1px solid var(--accent);border-radius:8px;padding:11px 16px;font-size:13px;
+    opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none}
+  .toast.show{opacity:1;transform:none}
+</style>
+<!-- data.js 由 export.py 在静态部署时生成；服务端模式下不存在，加载失败也不影响 -->
+<script src="data.js" onerror="void 0"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/3432860/header.jpg" alt="封面"
+         onerror="this.style.display='none'">
+    <div>
+      <h1>异病侦探 <span style="color:var(--dim);font-weight:400;font-size:15px">Psycho-Sleuth</span></h1>
+      <div class="sub">
+        Steam AppID 3432860 ·
+        <a href="https://store.steampowered.com/app/3432860/" target="_blank" rel="noopener">商店页</a> ·
+        <a href="https://steamcommunity.com/app/3432860/reviews/" target="_blank" rel="noopener">评测区</a>
+      </div>
+      <div class="sub" id="statusLine" style="margin-top:4px">加载中…</div>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnRefresh">立即抓取最新数据</button>
+    <a class="btn-ghost" id="btnSource" href="/download/source.zip" download>下载源码</a>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>每日好评 / 差评数量</h2>
+    <div class="hint">来自 Steam 官方评测直方图接口，是<strong>全量</strong>计数（不是抽样）。</div>
+    <svg id="chartDaily" viewBox="0 0 900 250" preserveAspectRatio="none" style="height:250px"></svg>
+    <div class="legend">
+      <span><i style="background:var(--pos)"></i>好评</span>
+      <span><i style="background:var(--neg)"></i>差评</span>
+      <span><i style="background:var(--accent)"></i>当日好评率（右轴）</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>好评率变化趋势</h2>
+    <div class="hint">按天累计的好评率走势，以及每次抓取时商店页显示的总好评率。</div>
+    <svg id="chartTrend" viewBox="0 0 900 220" preserveAspectRatio="none" style="height:220px"></svg>
+  </div>
+
+  <div class="card">
+    <h2>按时长分层的好评率</h2>
+    <div class="hint">按每条评测记录的「总时数」分组，点击卡片可筛选下方评测列表。</div>
+    <div class="tiers" id="tiers"></div>
+    <svg id="chartTier" viewBox="0 0 900 210" preserveAspectRatio="none"
+         style="height:210px;margin-top:22px"></svg>
+  </div>
+
+  <div class="card">
+    <h2>分层 × 日期：每日好评率</h2>
+    <div class="hint">格子颜色越绿说明当日该时长段好评率越高，数字为样本量，灰色表示无样本。</div>
+    <div id="heatmap" style="overflow-x:auto"></div>
+  </div>
+
+  <div class="card">
+    <h2>评测明细 <span id="revCount" style="color:var(--dim);font-weight:400;font-size:13px"></span></h2>
+    <div class="controls">
+      <select id="fTier"></select>
+      <select id="fVerdict">
+        <option value="all">全部评价</option>
+        <option value="pos">仅好评</option>
+        <option value="neg">仅差评</option>
+      </select>
+      <input type="search" id="fQuery" placeholder="搜索作者…">
+      <button id="btnReset" style="padding:7px 13px">重置筛选</button>
+    </div>
+    <div id="revList"></div>
+  </div>
+
+  <div class="foot">
+    数据来源：Steam 官方评测直方图接口 + Steam 社区评测页抓取<br>
+    <span id="footNote"></span>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+let DATA = null, TIER_DETAIL = null, activeTier = "all";
+// 静态部署（GitHub Pages）时由 data.js 注入；服务端模式下保持 null。
+const STATIC = window.__STATIC_DATA__ || null;
+
+const fmt = n => n == null ? "—" : n.toLocaleString("zh-CN");
+const pct = r => r == null ? "—" : r.toFixed(1) + "%";
+const dayShort = d => { const p = d.split("-"); return `${+p[1]}/${+p[2]}`; };
+
+function el(tag, attrs = {}, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* ---------- KPI ---------- */
+function renderKpis() {
+  const s = DATA.latest_snapshot, sm = DATA.sampled, t = DATA.tiers;
+  const snaps = DATA.snapshots;
+  let delta = null;
+  if (snaps.length > 1) delta = snaps[snaps.length - 1].rate - snaps[0].rate;
+
+  const negTier = t.filter(x => x.n >= 20).sort((a, b) => a.rate - b.rate)[0];
+  const posTier = t.filter(x => x.n >= 20).sort((a, b) => b.rate - a.rate)[0];
+
+  const badges = [
+    { lbl: "商店页总好评率", val: s ? pct(s.rate) : "—",
+      note: s ? `好评 ${fmt(s.positive)} / 共 ${fmt(s.total)} 条` : "暂无数据",
+      cls: s && s.rate >= 80 ? "up" : s && s.rate >= 70 ? "" : "down" },
+    { lbl: "变化（首次抓取至今）", val: delta == null ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(1) + " pt",
+      note: snaps.length > 1 ? `${snaps.length} 次快照` : "等待更多快照",
+      cls: delta == null ? "flat" : delta > 0.05 ? "up" : delta < -0.05 ? "down" : "flat" },
+    { lbl: "采样评测数", val: fmt(sm.total),
+      note: `好评 ${fmt(sm.positive)} · 差评 ${fmt(sm.negative)}`, cls: "" },
+    { lbl: "采样好评率", val: pct(sm.rate),
+      note: "仅统计抓取到的评测卡片", cls: sm.rate >= 80 ? "up" : "down" },
+    { lbl: "最挑剔时长段", val: negTier ? (negTier.label || negTier.tier) : "—",
+      note: negTier ? `好评率 ${pct(negTier.rate)}（${negTier.n} 条）` : "", cls: "down" },
+    { lbl: "最认可时长段", val: posTier ? (posTier.label || posTier.tier) : "—",
+      note: posTier ? `好评率 ${pct(posTier.rate)}（${posTier.n} 条）` : "", cls: "up" },
+  ];
+
+  $("#kpis").innerHTML = badges.map(b => `
+    <div class="kpi">
+      <div class="lbl">${b.lbl}</div>
+      <div class="val ${b.cls}">${b.val}</div>
+      <div class="note">${b.note}</div>
+    </div>`).join("");
+
+  $("#statusLine").innerHTML = s
+    ? `<span class="badge ${s.rate >= 80 ? 'b-pos' : s.rate >= 70 ? 'b-mid' : 'b-neg'}">${s.label || ''}</span>
+       数据更新于 ${new Date(s.fetched_at * 1000).toLocaleString("zh-CN")}`
+    : "暂无数据";
+}
+
+/* ---------- 每日柱状图 ---------- */
+function renderDaily() {
+  const svg = $("#chartDaily"); svg.innerHTML = "";
+  const H = DATA.histogram;
+  if (!H.length) { svg.appendChild(el("text", { x: 450, y: 125, "text-anchor": "middle", class: "tick" }, "暂无直方图数据")); return; }
+
+  const W = 900, PADL = 46, PADR = 52, PADT = 16, PADB = 34;
+  const iw = W - PADL - PADR, ih = 250 - PADT - PADB;
+  const maxV = Math.max(...H.map(d => d.up + d.down)) * 1.12 || 1;
+  const bw = iw / H.length;
+
+  for (let i = 0; i <= 4; i++) {
+    const y = PADT + ih - (ih * i / 4);
+    svg.appendChild(el("line", { x1: PADL, x2: PADL + iw, y1: y, y2: y, class: "grid-line" }));
+    svg.appendChild(el("text", { x: PADL - 8, y: y + 4, "text-anchor": "end", class: "tick" },
+      Math.round(maxV * i / 4)));
+  }
+  [0, 50, 100].forEach(p => {
+    const y = PADT + ih - (ih * p / 100);
+    svg.appendChild(el("text", { x: PADL + iw + 8, y: y + 4, class: "tick" }, p + "%"));
+  });
+
+  const pts = [];
+  H.forEach((d, i) => {
+    const x = PADL + i * bw + bw * 0.18, w = bw * 0.64;
+    const hUp = ih * d.up / maxV, hDn = ih * d.down / maxV;
+    const yUp = PADT + ih - hUp, yDn = yUp - hDn;
+    const g = el("g", { class: "hoverable" });
+    g.appendChild(el("rect", { x, y: yUp, width: w, height: Math.max(hUp, .5), fill: "var(--pos)", rx: 2 }));
+    g.appendChild(el("rect", { x, y: yDn, width: w, height: Math.max(hDn, .5), fill: "var(--neg)", rx: 2 }));
+    g.appendChild(el("title", {}, `${d.day}\n好评 ${d.up}\n差评 ${d.down}\n好评率 ${pct(d.up * 100 / (d.up + d.down))}`));
+    svg.appendChild(g);
+    if (d.up + d.down > maxV * 0.06) {
+      svg.appendChild(el("text", { x: x + w / 2, y: yDn - 5, "text-anchor": "middle",
+        class: "tick", fill: "#c9d1d9" }, d.up + d.down));
+    }
+    svg.appendChild(el("text", { x: PADL + i * bw + bw / 2, y: PADT + ih + 18,
+      "text-anchor": "middle", class: "tick" }, dayShort(d.day)));
+    pts.push([PADL + i * bw + bw / 2, PADT + ih - ih * (d.up / (d.up + d.down))]);
+  });
+
+  if (pts.length > 1) {
+    svg.appendChild(el("path", {
+      d: pts.map((p, i) => (i ? "L" : "M") + p[0] + "," + p[1]).join(" "),
+      fill: "none", stroke: "var(--accent)", "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-dasharray": "5 3" }));
+    pts.forEach(p => svg.appendChild(el("circle", { cx: p[0], cy: p[1], r: 3.2, fill: "var(--accent)" })));
+  }
+}
+
+/* ---------- 趋势 ---------- */
+function renderTrend() {
+  const svg = $("#chartTrend"); svg.innerHTML = "";
+  const H = DATA.histogram, snaps = DATA.snapshots;
+  if (!H.length) { svg.appendChild(el("text", { x: 450, y: 110, "text-anchor": "middle", class: "tick" }, "暂无数据")); return; }
+
+  const W = 900, PADL = 46, PADR = 20, PADT = 16, PADB = 32;
+  const iw = W - PADL - PADR, ih = 220 - PADT - PADB;
+
+  let up = 0, dn = 0;
+  const cum = H.map(d => {
+    up += d.up; dn += d.down;
+    return { day: d.day, rate: up * 100 / (up + dn), dayRate: d.up * 100 / (d.up + d.down) };
+  });
+  const vals = cum.flatMap(c => [c.rate, c.dayRate]).concat(snaps.map(s => s.rate));
+  const lo = Math.max(0, Math.min(...vals) - 4), hi = Math.min(100, Math.max(...vals) + 3);
+  const span = Math.max(hi - lo, 1);
+  const yOf = v => PADT + ih - ih * (v - lo) / span;
+  const xOf = i => PADL + (cum.length === 1 ? iw / 2 : iw * i / (cum.length - 1));
+
+  for (let i = 0; i <= 4; i++) {
+    const v = lo + span * i / 4, y = yOf(v);
+    svg.appendChild(el("line", { x1: PADL, x2: PADL + iw, y1: y, y2: y, class: "grid-line" }));
+    svg.appendChild(el("text", { x: PADL - 8, y: y + 4, "text-anchor": "end", class: "tick" },
+      v.toFixed(0) + "%"));
+  }
+
+  svg.appendChild(el("path", {
+    d: cum.map((c, i) => (i ? "L" : "M") + xOf(i) + "," + yOf(c.rate)).join(" "),
+    fill: "none", stroke: "var(--pos)", "stroke-width": 2.5, "stroke-linejoin": "round" }));
+  svg.appendChild(el("path", {
+    d: cum.map((c, i) => (i ? "L" : "M") + xOf(i) + "," + yOf(c.dayRate)).join(" "),
+    fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-dasharray": "5 3" }));
+
+  cum.forEach((c, i) => {
+    svg.appendChild(el("circle", { cx: xOf(i), cy: yOf(c.rate), r: 3.6, fill: "var(--pos)" }));
+    svg.appendChild(el("circle", { cx: xOf(i), cy: yOf(c.dayRate), r: 3, fill: "var(--accent)" }));
+    svg.appendChild(el("text", { x: xOf(i), y: PADT + ih + 18, "text-anchor": "middle",
+      class: "tick" }, dayShort(c.day)));
+    svg.appendChild(el("text", { x: xOf(i), y: yOf(c.rate) - 9, "text-anchor": "middle",
+      class: "tick", fill: "#56d364", "font-size": 10.5 }, c.rate.toFixed(1)));
+  });
+
+  svg.insertAdjacentHTML("beforeend",
+    `<g><rect x="${PADL}" y="4" width="9" height="9" rx="2" fill="var(--pos)"></rect>
+     <text x="${PADL + 14}" y="12" class="tick">累计好评率</text>
+     <rect x="${PADL + 108}" y="4" width="9" height="9" rx="2" fill="var(--accent)"></rect>
+     <text x="${PADL + 122}" y="12" class="tick">当日好评率</text></g>`);
+}
+
+/* ---------- 分层卡片 ---------- */
+function renderTiers() {
+  const max = 100;
+  $("#tiers").innerHTML = DATA.tiers.map(t => {
+    const rate = t.rate == null ? 0 : t.rate;
+    const cls = t.rate == null ? "" : (t.rate >= 90 ? "up" : t.rate >= 75 ? "" : "down");
+    const col = t.rate == null ? "#30363d" : (t.rate >= 90 ? "var(--pos)" : t.rate >= 75 ? "var(--warn)" : "var(--neg)");
+    return `<div class="tier" data-tier="${t.tier}">
+      <div class="t">${t.label || t.tier}</div>
+      <div class="r ${cls}">${t.rate == null ? "—" : pct(t.rate)}</div>
+      <div class="n">${t.n} 条评测 · 好评 ${t.positive}</div>
+      <div class="bar"><i style="width:${rate / max * 100}%;background:${col}"></i></div>
+    </div>`;
+  }).join("");
+
+  document.querySelectorAll(".tier").forEach(d => {
+    if (d.dataset.tier === activeTier) d.classList.add("active");
+    d.onclick = () => {
+      activeTier = activeTier === d.dataset.tier ? "all" : d.dataset.tier;
+      document.querySelectorAll(".tier").forEach(x =>
+        x.classList.toggle("active", x.dataset.tier === activeTier));
+      $("#fTier").value = activeTier;
+      loadReviews();
+    };
+  });
+}
+
+/* ---------- 分层柱状 ---------- */
+function renderTierChart() {
+  const svg = $("#chartTier"); svg.innerHTML = "";
+  const T = DATA.tiers;
+  const W = 900, PADL = 50, PADR = 20, PADT = 18, PADB = 40;
+  const iw = W - PADL - PADR, ih = 210 - PADT - PADB;
+  const bw = iw / Math.max(T.length, 1);
+
+  for (let i = 0; i <= 4; i++) {
+    const v = i * 25, y = PADT + ih - ih * i / 4;
+    svg.appendChild(el("line", { x1: PADL, x2: PADL + iw, y1: y, y2: y, class: "grid-line" }));
+    svg.appendChild(el("text", { x: PADL - 8, y: y + 4, "text-anchor": "end", class: "tick" }, v + "%"));
+  }
+  const base = PADT + ih - ih * 0.5;          // 50% 参考线
+  svg.appendChild(el("line", { x1: PADL, x2: PADL + iw, y1: base, y2: base,
+    stroke: "#4a5560", "stroke-dasharray": "4 4" }));
+  svg.appendChild(el("text", { x: PADL + iw, y: base - 5, "text-anchor": "end",
+    class: "tick", fill: "#8b949e" }, "50% 基准线"));
+
+  T.forEach((t, i) => {
+    const x = PADL + i * bw + bw * 0.22, w = bw * 0.56;
+    if (t.rate == null) return;
+    const h = ih * (t.rate / 100) / 2;       // 从 50% 线开始画
+    const y = t.rate >= 50 ? base - h : base;
+    const col = t.rate >= 90 ? "var(--pos)" : t.rate >= 75 ? "var(--warn)" : "var(--neg)";
+    const g = el("g", { class: "hoverable" });
+    g.appendChild(el("rect", { x, y: Math.min(y, base - (t.rate >= 50 ? h : 0)),
+      width: w, height: Math.abs(h), fill: col, rx: 3, opacity: .9 }));
+    g.appendChild(el("title", {}, `${t.label || t.tier}: 好评率 ${pct(t.rate)}（${t.n} 条）`));
+    svg.appendChild(g);
+    svg.appendChild(el("text", { x: x + w / 2, y: (t.rate >= 50 ? base - h - 8 : base + h + 14),
+      "text-anchor": "middle", class: "tick", fill: "#c9d1d9", "font-size": 11.5 },
+      t.rate.toFixed(1) + "%"));
+    svg.appendChild(el("text", { x: x + w / 2, y: PADT + ih + 20, "text-anchor": "middle",
+      class: "tick" }, t.label || t.tier));
+    svg.appendChild(el("text", { x: x + w / 2, y: PADT + ih + 34, "text-anchor": "middle",
+      class: "tick", "font-size": 10 }, `n=${t.n}`));
+  });
+}
+
+/* ---------- 热力图 ---------- */
+function renderHeatmap() {
+  const box = $("#heatmap");
+  if (!TIER_DETAIL || !TIER_DETAIL.data) { box.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  const detail = TIER_DETAIL.data, labels = TIER_DETAIL.labels || {};
+  const tiers = (TIER_DETAIL.order && TIER_DETAIL.order.length)
+    ? TIER_DETAIL.order.filter(t => t in detail) : Object.keys(detail);
+  const days = [...new Set(tiers.flatMap(t => detail[t].map(d => d.day)))].sort();
+  if (!days.length) { box.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+
+  const cell = (up, down) => {
+    const n = up + down;
+    if (!n) return '<td class="hm-empty">·</td>';
+    const raw = up * 100 / n;
+    const lvl = raw >= 95 ? 4 : raw >= 88 ? 3 : raw >= 75 ? 2 : raw >= 50 ? 1 : 0;
+    return `<td class="hm hm-${lvl}" title="${up} 好评 / ${down} 差评 · 好评率 ${raw.toFixed(0)}%">${n}</td>`;
+  };
+
+  box.innerHTML = `<table class="hm-table">
+    <thead><tr><th class="hm-row">时长段</th>
+    ${days.map(d => `<th>${dayShort(d)}</th>`).join("")}</tr></thead><tbody>
+    ${tiers.map(t => {
+      const map = Object.fromEntries(detail[t].map(d => [d.day, d]));
+      const up = detail[t].reduce((a, d) => a + d.up, 0);
+      const tot = detail[t].reduce((a, d) => a + d.up + d.down, 0);
+      return `<tr><td class="hm-row">${labels[t] || t}
+        <span>${tot ? pct(up * 100 / tot) : "—"}</span></td>
+        ${days.map(d => cell(map[d]?.up || 0, map[d]?.down || 0)).join("")}</tr>`;
+    }).join("")}
+    </tbody></table>
+    <div class="hm-note">格子数字＝当日该时长段的评测条数，颜色越绿好评率越高；悬停查看好评/差评拆分。</div>`;
+}
+
+/* ---------- 列表 ---------- */
+function fillTierSelect() {
+  const sel = $("#fTier");
+  sel.innerHTML = '<option value="all">全部时长</option>' +
+    DATA.tiers.map(t => `<option value="${t.tier}">${t.label || t.tier}（${t.n} 条）</option>`).join("");
+  sel.value = activeTier;
+}
+
+async function loadReviews() {
+  const tier = $("#fTier").value, verdict = $("#fVerdict").value;
+  const q = $("#fQuery").value.trim().toLowerCase();
+  let items, count, total;
+
+  if (STATIC) {
+    let rows = STATIC.reviews || [];
+    total = rows.length;
+    if (tier !== "all") rows = rows.filter(v => v.tier === tier);
+    if (verdict === "pos") rows = rows.filter(v => v.recommended);
+    else if (verdict === "neg") rows = rows.filter(v => !v.recommended);
+    if (q) rows = rows.filter(v => (v.author || "").toLowerCase().includes(q));
+    rows = rows.slice().sort((a, b) => (b.hours || 0) - (a.hours || 0));
+    count = rows.length; items = rows.slice(0, 300);
+  } else {
+    const p = new URLSearchParams({ tier, verdict, q });
+    const r = await fetch("/api/reviews?" + p).then(x => x.json());
+    count = r.count; items = r.items.slice(0, 300);
+  }
+
+  $("#revCount").textContent = `（${count} 条）`;
+  if (!items.length) {
+    $("#revList").innerHTML = '<div class="empty">没有符合条件的评测，试试放宽筛选。</div>';
+    return;
+  }
+  $("#revList").innerHTML = items.map(v => `
+    <div class="rev">
+      <div class="v ${v.recommended ? "up" : "down"}">${v.recommended ? "推荐" : "不推荐"}</div>
+      <div class="body">
+        <div class="meta">
+          <span class="hrs">${v.hours == null ? "时数未知" : v.hours.toFixed(1) + " 小时"}</span>
+          <span>${v.posted ? v.posted.replace("November", "11 月") : ""}</span>
+          ${v.url ? `<a class="who" href="${v.url}" target="_blank" rel="noopener">${v.author || "匿名"}</a>`
+                  : `<span class="pill">${v.author || "匿名"}</span>`}
+        </div>
+      </div>
+    </div>`).join("");
+}
+
+/* ---------- 刷新 ---------- */
+async function refresh() {
+  const b = $("#btnRefresh");
+  b.disabled = true; b.textContent = "抓取中…";
+  try {
+    const r = await fetch("/api/refresh?what=all", { method: "POST" }).then(x => x.json());
+    if (!r.ok) throw new Error(r.error || "失败");
+    toast("抓取完成");
+    await load();
+  } catch (e) {
+    toast("抓取失败：" + e.message);
+  } finally {
+    b.disabled = false; b.textContent = "立即抓取最新数据";
+  }
+}
+
+async function load() {
+  if (STATIC) {
+    DATA = STATIC;
+    TIER_DETAIL = STATIC.tier_detail || { order: [], labels: {}, data: {} };
+  } else {
+    DATA = await fetch("/api/overview").then(x => x.json());
+    TIER_DETAIL = await fetch("/api/tier_detail").then(x => x.json());
+  }
+  renderKpis(); renderDaily(); renderTrend();
+  renderTiers(); renderTierChart(); renderHeatmap(); fillTierSelect();
+  $("#footNote").textContent =
+    `共 ${DATA.sampled.total} 条评测已入库 · 页面生成于 ${new Date(DATA.generated_at).toLocaleString("zh-CN")}`;
+  await loadReviews();
+}
+
+if (STATIC) {
+  const b = $("#btnRefresh");
+  if (b) {
+    b.textContent = "自动更新（每 30 分钟）";
+    b.disabled = true; b.style.opacity = ".55"; b.style.cursor = "default";
+  }
+  const src = $("#btnSource");
+  if (src) src.href = STATIC.repo || "https://github.com/";
+}
+
+if (!STATIC) $("#btnRefresh").onclick = refresh;
+$("#fTier").onchange = () => { activeTier = $("#fTier").value; renderTiers(); loadReviews(); };
+$("#fVerdict").onchange = loadReviews;
+$("#fQuery").oninput = (() => {
+  let t; return () => { clearTimeout(t); t = setTimeout(loadReviews, 260); };
+})();
+$("#btnReset").onclick = () => {
+  activeTier = "all"; $("#fTier").value = "all"; $("#fVerdict").value = "all";
+  $("#fQuery").value = ""; renderTiers(); loadReviews();
+};
+load();
+</script>
+</body>
+</html>
