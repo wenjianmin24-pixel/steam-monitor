@@ -85,7 +85,7 @@ jobs:
 
             git add data.db
             if ! git diff --staged --quiet; then
-              git commit -q -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
+              git commit -q -m "data: $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
               for i in 1 2 3; do
                 git pull --rebase --autostash -q origin main && git push -q && break
                 sleep 3
