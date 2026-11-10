@@ -73,7 +73,13 @@ jobs:
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
             round=$((round + 1))
             echo "::group::round $round  $(date -u +%H:%M:%S UTC)"
-            python collect.py all || echo "collect failed, continuing"
+            # 每轮只抓「直方图 + 商店页 summary」，总共约 2 秒，保证快照密度是分钟级
+            python collect.py hist    || echo "hist failed"
+            python collect.py summary || echo "summary failed"
+            # 逐条评测翻页较慢（约 75 秒），每 4 轮抓一次就足够
+            if [ $((round % 4)) -eq 1 ]; then
+              python collect.py reviews || echo "reviews failed"
+            fi
             python export.py site  || echo "export failed, continuing"
             python -c "import sqlite3;c=sqlite3.connect('data.db');print(' DB: snapshots',c.execute('select count(*) from snapshot').fetchone()[0],'reviews',c.execute('select count(*) from review').fetchone()[0])"
 
