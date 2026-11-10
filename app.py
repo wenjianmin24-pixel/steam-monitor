@@ -29,6 +29,23 @@ TIER_LABELS = {
     "0-2h": "0–2 小时", "2-5h": "2–5 小时", "5-10h": "5–10 小时",
     "10-20h": "10–20 小时", "20-+h": "20 小时以上",
 }
+# 累计分层：至少玩过 lo 小时，下界取区间分层的下界
+CUM_BOUNDS = [0, 2, 5, 10, 20]
+
+
+def cum_name(lo):
+    return "cum-%dh" % lo
+
+
+def cum_label(lo):
+    return "全部时长" if lo == 0 else "%d 小时以上" % lo
+
+
+def cum_stats(reviews, lo):
+    g = [r for r in reviews if r["hours"] is not None and r["hours"] >= lo]
+    p = sum(r["recommended"] for r in g)
+    return {"tier": cum_name(lo), "label": cum_label(lo), "lo": lo, "n": len(g),
+            "positive": p, "rate": round(p * 100.0 / len(g), 1) if g else None}
 
 
 def tier_label(name):
@@ -86,6 +103,7 @@ def overview():
         "snapshots": snaps,
         "histogram": hist,
         "tiers": tiers,
+        "cumulative": [cum_stats(reviews, lo) for lo in CUM_BOUNDS],
         "sampled": {"total": total, "positive": pos, "negative": neg_total,
                     "rate": round(pos * 100.0 / total, 1) if total else None},
         "latest_snapshot": snaps[-1] if snaps else None,
@@ -103,7 +121,11 @@ def reviews():
     rows = [dict(r) for r in c.execute(
         "SELECT url, author, recommended, hours, posted, lang, body FROM review")]
     if tier and tier != "all":
-        rows = [r for r in rows if tier_of(r["hours"]) == tier]
+        if tier.startswith("cum-"):
+            lo = int(tier[4:-1])
+            rows = [r for r in rows if r["hours"] is not None and r["hours"] >= lo]
+        else:
+            rows = [r for r in rows if tier_of(r["hours"]) == tier]
     if verdict == "pos":
         rows = [r for r in rows if r["recommended"]]
     elif verdict == "neg":
@@ -138,9 +160,26 @@ def tier_detail():
             e["up" if r["recommended"] else "down"] += 1
         out[name] = sorted(days.values(), key=lambda x: x["day"])
     names = [f"{lo}-{hi if hi < 10**9 else '+'}h" for lo, hi in HOUR_TIERS]
+    cum_out, cum_names = {}, []
+    for lo in CUM_BOUNDS:
+        name = cum_name(lo)
+        days = {}
+        for r in rows:
+            if r["hours"] is None or r["hours"] < lo:
+                continue
+            d = day_of(r["posted"])
+            if not d:
+                continue
+            e = days.setdefault(d, {"day": d, "up": 0, "down": 0})
+            e["up" if r["recommended"] else "down"] += 1
+        cum_out[name] = sorted(days.values(), key=lambda x: x["day"])
+        cum_names.append(name)
     return jsonify({"order": [n for n in names if n in out],
                     "labels": {n: tier_label(n) for n in out},
-                    "data": out})
+                    "data": out,
+                    "cum_order": cum_names,
+                    "cum_labels": {n: cum_label(int(n[4:-1])) for n in cum_out},
+                    "cum_data": cum_out})
 
 
 MONTHS = {m: i + 1 for i, m in enumerate(

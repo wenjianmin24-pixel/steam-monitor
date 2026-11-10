@@ -14,6 +14,16 @@ TIER_LABELS = {
     "0-2h": "0–2 小时", "2-5h": "2–5 小时", "5-10h": "5–10 小时",
     "10-20h": "10–20 小时", "20-+h": "20 小时以上",
 }
+# 累计分层：至少玩过 lo 小时的评测算一组，下界取区间分层的下界
+CUM_BOUNDS = [0, 2, 5, 10, 20]
+
+
+def cum_name(lo):
+    return f"cum-{lo}h"
+
+
+def cum_label(lo):
+    return "全部时长" if lo == 0 else f"{lo} 小时以上"
 MONTHS = {m: i + 1 for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July",
      "August", "September", "October", "November", "December"])}
@@ -74,6 +84,15 @@ def build():
     total = len(reviews)
     pos = sum(r["recommended"] for r in reviews)
 
+    # 累计分层：「至少玩过 lo 小时」的口径，随 lo 递增样本不断减少
+    cumulative = []
+    for lo in CUM_BOUNDS:
+        g = [r for r in reviews if r["hours"] is not None and r["hours"] >= lo]
+        p = sum(r["recommended"] for r in g)
+        cumulative.append({"tier": cum_name(lo), "label": cum_label(lo), "lo": lo,
+                           "n": len(g), "positive": p,
+                           "rate": round(p * 100.0 / len(g), 1) if g else None})
+
     # 分层 × 日期
     detail, order, labels = {}, [], {}
     for lo, hi in HOUR_TIERS:
@@ -90,16 +109,32 @@ def build():
         order.append(name)
         labels[name] = TIER_LABELS.get(name, name)
 
+    # 累计分层 × 日期（口径同上：hours >= lo）
+    cum_detail, cum_order, cum_labels = {}, [], {}
+    for lo in CUM_BOUNDS:
+        name = cum_name(lo)
+        days = {}
+        for r in reviews:
+            if r["hours"] is None or r["day"] is None or r["hours"] < lo:
+                continue
+            e = days.setdefault(r["day"], {"day": r["day"], "up": 0, "down": 0})
+            e["up" if r["recommended"] else "down"] += 1
+        cum_detail[name] = sorted(days.values(), key=lambda x: x["day"])
+        cum_order.append(name)
+        cum_labels[name] = cum_label(lo)
+
     return {
         "appid": APPID,
         "snapshots": snaps,
         "histogram": hist,
         "tiers": tiers,
+        "cumulative": cumulative,
         "sampled": {"total": total, "positive": pos, "negative": total - pos,
                     "rate": round(pos * 100.0 / total, 1) if total else None},
         "latest_snapshot": snaps[-1] if snaps else None,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "tier_detail": {"order": order, "labels": labels, "data": detail},
+        "cum_detail": {"order": cum_order, "labels": cum_labels, "data": cum_detail},
         "reviews": reviews,
         "repo": os.environ.get("REPO_URL", ""),
     }

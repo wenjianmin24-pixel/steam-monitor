@@ -157,6 +157,14 @@
   </div>
 
   <div class="card">
+    <h2>累计分层：玩满 N 小时以上的好评率</h2>
+    <div class="hint">「X 小时以上」＝ 游玩时长 ≥ X 小时的全部评测（也含更长时长的）。越往右样本越少、玩家越硬核，点击卡片可筛选下方列表。</div>
+    <div class="tiers" id="cumTiers"></div>
+    <svg id="chartCum" viewBox="0 0 900 210" preserveAspectRatio="none"
+         style="height:210px;margin-top:22px"></svg>
+  </div>
+
+  <div class="card">
     <h2>分层 × 日期：每日好评率</h2>
     <div class="hint">格子颜色越绿说明当日该时长段好评率越高，数字为样本量，灰色表示无样本。</div>
     <div id="heatmap" style="overflow-x:auto"></div>
@@ -356,22 +364,21 @@ function renderTrend() {
 }
 
 /* ---------- 分层卡片 ---------- */
-function renderTiers() {
-  const max = 100;
-  $("#tiers").innerHTML = DATA.tiers.map(t => {
-    const rate = t.rate == null ? 0 : t.rate;
-    const cls = t.rate == null ? "" : (t.rate >= 90 ? "up" : t.rate >= 75 ? "" : "down");
-    const col = t.rate == null ? "#30363d" : (t.rate >= 90 ? "var(--pos)" : t.rate >= 75 ? "var(--warn)" : "var(--neg)");
-    return `<div class="tier" data-tier="${t.tier}">
-      <div class="t">${t.label || t.tier}</div>
-      <div class="r ${cls}">${t.rate == null ? "—" : pct(t.rate)}</div>
-      <div class="n">${t.n} 条评测 · 好评 ${t.positive}</div>
-      <div class="bar"><i style="width:${rate / max * 100}%;background:${col}"></i></div>
-    </div>`;
-  }).join("");
+function tierCard(t, kind) {
+  const rate = t.rate == null ? 0 : t.rate;
+  const cls = t.rate == null ? "" : (t.rate >= 90 ? "up" : t.rate >= 75 ? "" : "down");
+  const col = t.rate == null ? "#30363d" : (t.rate >= 90 ? "var(--pos)" : t.rate >= 75 ? "var(--warn)" : "var(--neg)");
+  return `<div class="tier" data-tier="${t.tier}" data-kind="${kind}">
+    <div class="t">${t.label || t.tier}</div>
+    <div class="r ${cls}">${t.rate == null ? "—" : pct(t.rate)}</div>
+    <div class="n">${t.n} 条评测 · 好评 ${t.positive}</div>
+    <div class="bar"><i style="width:${rate}%;background:${col}"></i></div>
+  </div>`;
+}
 
+function bindTierCards() {
   document.querySelectorAll(".tier").forEach(d => {
-    if (d.dataset.tier === activeTier) d.classList.add("active");
+    d.classList.toggle("active", d.dataset.tier === activeTier);
     d.onclick = () => {
       activeTier = activeTier === d.dataset.tier ? "all" : d.dataset.tier;
       document.querySelectorAll(".tier").forEach(x =>
@@ -382,10 +389,17 @@ function renderTiers() {
   });
 }
 
+function renderTiers() {
+  $("#tiers").innerHTML = DATA.tiers.map(t => tierCard(t, "interval")).join("");
+  const cum = DATA.cumulative || [];
+  $("#cumTiers").innerHTML = cum.map(t => tierCard(t, "cum")).join("");
+  bindTierCards();
+}
+
 /* ---------- 分层柱状 ---------- */
-function renderTierChart() {
-  const svg = $("#chartTier"); svg.innerHTML = "";
-  const T = DATA.tiers;
+function tierChart(svgSel, T) {
+  const svg = $(svgSel); svg.innerHTML = "";
+  if (!T || !T.length) return;
   const W = 900, PADL = 50, PADR = 20, PADT = 18, PADB = 40;
   const iw = W - PADL - PADR, ih = 210 - PADT - PADB;
   const bw = iw / Math.max(T.length, 1);
@@ -420,6 +434,11 @@ function renderTierChart() {
     svg.appendChild(el("text", { x: x + w / 2, y: PADT + ih + 34, "text-anchor": "middle",
       class: "tick", "font-size": 10 }, `n=${t.n}`));
   });
+}
+
+function renderTierChart() {
+  tierChart("#chartTier", DATA.tiers);
+  tierChart("#chartCum", DATA.cumulative || []);
 }
 
 /* ---------- 热力图 ---------- */
@@ -458,8 +477,13 @@ function renderHeatmap() {
 /* ---------- 列表 ---------- */
 function fillTierSelect() {
   const sel = $("#fTier");
+  const cum = DATA.cumulative || [];
   sel.innerHTML = '<option value="all">全部时长</option>' +
-    DATA.tiers.map(t => `<option value="${t.tier}">${t.label || t.tier}（${t.n} 条）</option>`).join("");
+    '<optgroup label="区间分层">' +
+    DATA.tiers.map(t => `<option value="${t.tier}">${t.label || t.tier}（${t.n} 条）</option>`).join("") +
+    '</optgroup><optgroup label="累计分层（X 小时以上）">' +
+    cum.filter(t => t.lo > 0).map(t => `<option value="${t.tier}">${t.label}（${t.n} 条）</option>`).join("") +
+    '</optgroup>';
   sel.value = activeTier;
 }
 
@@ -471,7 +495,14 @@ async function loadReviews() {
   if (STATIC) {
     let rows = STATIC.reviews || [];
     total = rows.length;
-    if (tier !== "all") rows = rows.filter(v => v.tier === tier);
+    if (tier !== "all") {
+      if (tier.startsWith("cum-")) {
+        const lo = parseInt(tier.slice(4, -1), 10);
+        rows = rows.filter(v => v.hours != null && v.hours >= lo);
+      } else {
+        rows = rows.filter(v => v.tier === tier);
+      }
+    }
     if (verdict === "pos") rows = rows.filter(v => v.recommended);
     else if (verdict === "neg") rows = rows.filter(v => !v.recommended);
     if (q) rows = rows.filter(v => (v.author || "").toLowerCase().includes(q));
