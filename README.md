@@ -65,3 +65,18 @@ python app.py                # 127.0.0.1:5001
 
 累计分层的下界取自区间分层的下界（0、2、5、10、20），因此 `cum-2h` 恰好等于「2–5h + 5–10h + 10–20h + 20h+」。
 代码位置：`export.py` 与 `app.py` 里的 `CUM_BOUNDS = [0, 2, 5, 10, 20]`、`cum_name()`、`cum_label()`；前端是 `index.html` 的 `#cumTiers` 卡片与 `#chartCum` 柱状图。
+
+## 发布链路（为什么拆成两个 workflow）
+
+- `.github/workflows/collect.yml`：抓取循环。触发一次后在同一 job 里循环 5.5 小时，
+  每约 4 分钟抓 `hist` + `summary`（约 2 秒）、每 4 轮抓一次完整评测列表（约 75 秒），
+  然后提交 `data.db`，最后调 GitHub API 显式 `workflow_dispatch` 触发 `deploy.yml`。
+- `.github/workflows/deploy.yml`：导出静态站并用 `actions/deploy-pages` 发布。
+
+两个必须知道的坑：
+
+1. `GITHUB_TOKEN` 推送的提交**不会触发其它 workflow**（GitHub 防递归），
+   所以循环里必须自己调 `/actions/workflows/deploy.yml/dispatches`，否则线上会一直冻住。
+2. Pages 走 `gh-pages` 分支构建时有**每小时 10 次构建**的硬配额
+   （官方文档：`10 builds per hour. This limit does not apply if you build and publish your site with a custom GitHub Actions workflow.`）。
+   每几分钟推一次会在一小时后全部 `Page build failed`，所以改用 Actions 部署。
