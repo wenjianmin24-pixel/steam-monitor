@@ -105,7 +105,8 @@
     opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none}
   .toast.show{opacity:1;transform:none}
 </style>
-<!-- data.js 由 export.py 在静态部署时生成；服务端模式下不存在，加载失败也不影响 -->
+<!-- data.js 由 export.py 在静态部署时生成；服务端模式下不存在，加载失败也不影响。
+     启动后 JS 会再带 ?t= 时间戳拉一次，绕开 Pages 的 10 分钟缓存。 -->
 <script src="data.js" onerror="void 0"></script>
 </head>
 <body>
@@ -188,7 +189,8 @@ const $ = s => document.querySelector(s);
 const NS = "http://www.w3.org/2000/svg";
 let DATA = null, TIER_DETAIL = null, activeTier = "all";
 // 静态部署（GitHub Pages）时由 data.js 注入；服务端模式下保持 null。
-const STATIC = window.__STATIC_DATA__ || null;
+// 先看内联注入，再在启动时尝试带时间戳拉取 data.js（绕过 Pages 的 10 分钟缓存）。
+let STATIC = window.__STATIC_DATA__ || null;
 
 const fmt = n => n == null ? "—" : n.toLocaleString("zh-CN");
 const pct = r => r == null ? "—" : r.toFixed(1) + "%";
@@ -240,9 +242,16 @@ function renderKpis() {
       <div class="note">${b.note}</div>
     </div>`).join("");
 
+  const ageMin = s ? Math.round((Date.now() / 1000 - s.fetched_at) / 60) : null;
+  const ageTxt = ageMin == null ? "" :
+    ageMin < 2 ? "刚刚更新" :
+    ageMin < 60 ? `距今 ${ageMin} 分钟` :
+    ageMin < 1440 ? `距今 ${Math.round(ageMin / 60)} 小时` :
+    `距今 ${Math.round(ageMin / 1440)} 天`;
+  const stale = ageMin != null && ageMin > 20;
   $("#statusLine").innerHTML = s
     ? `<span class="badge ${s.rate >= 80 ? 'b-pos' : s.rate >= 70 ? 'b-mid' : 'b-neg'}">${s.label || ''}</span>
-       数据更新于 ${new Date(s.fetched_at * 1000).toLocaleString("zh-CN")}`
+       <span title="${new Date(s.fetched_at * 1000).toLocaleString('zh-CN')}" style="color:${stale ? '#d29922' : 'var(--dim)'}">数据更新于 ${new Date(s.fetched_at * 1000).toLocaleString("zh-CN")} · ${ageTxt}</span>`
     : "暂无数据";
 }
 
@@ -509,8 +518,24 @@ async function refresh() {
   }
 }
 
+/* ---------- 静态模式：带时间戳拉取 data.js，绕过 CDN 缓存 ---------- */
+async function fetchLatestStatic() {
+  try {
+    const r = await fetch("data.js?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return null;
+    const txt = await r.text();
+    const i = txt.indexOf("=");
+    const fresh = JSON.parse(txt.slice(i + 1).replace(/;\s*$/, ""));
+    return fresh && fresh.snapshots ? fresh : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 async function load() {
   if (STATIC) {
+    const fresh = await fetchLatestStatic();
+    if (fresh) STATIC = fresh;
     DATA = STATIC;
     TIER_DETAIL = STATIC.tier_detail || { order: [], labels: {}, data: {} };
   } else {
@@ -524,14 +549,46 @@ async function load() {
   await loadReviews();
 }
 
+/* ---------- 自动刷新 ---------- */
+const AUTO_MS = 3 * 60 * 1000;
+let autoTimer = null;
+function scheduleAuto() {
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(async () => {
+    const before = DATA && DATA.latest_snapshot && DATA.latest_snapshot.fetched_at;
+    await load();
+    const after = DATA && DATA.latest_snapshot && DATA.latest_snapshot.fetched_at;
+    if (after && after !== before) toast("已更新到最新数据");
+    scheduleAuto();
+  }, AUTO_MS);
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { load().then(scheduleAuto); }
+});
+
 if (STATIC) {
   const b = $("#btnRefresh");
   if (b) {
-    b.textContent = "自动更新（每 30 分钟）";
-    b.disabled = true; b.style.opacity = ".55"; b.style.cursor = "default";
+    b.textContent = "刷新数据";
+    b.disabled = false; b.style.opacity = "1"; b.style.cursor = "pointer";
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = "拉取中…";
+      try {
+        const fresh = await fetchLatestStatic();
+        if (fresh) { STATIC = fresh; }
+        await load();
+        toast(fresh ? "已拉取最新快照" : "暂无更新，等下一次抓取");
+      } catch (e) {
+        toast("拉取失败：" + e.message);
+      } finally {
+        b.disabled = false; b.textContent = "刷新数据";
+        scheduleAuto();
+      }
+    };
   }
   const src = $("#btnSource");
   if (src) src.href = STATIC.repo || "https://github.com/";
+  scheduleAuto();
 }
 
 if (!STATIC) $("#btnRefresh").onclick = refresh;
