@@ -1,10 +1,11 @@
 name: Collect & Deploy
 
 # 为什么这样写：
-#   GitHub 对免费仓库的 schedule cron 限流很重（实测 21 小时只跑了 2 次）。
-#   所以改成「触发一次 → 在同一个 job 里连续循环 5 个多小时」：
-#   每 3 分钟 抓取 → 导出 → 推 gh-pages，页面每 3 分钟自动拉一次最新数据。
-#   这样数据延迟从「几小时」降到「几分钟」，cron 只负责把循环接上。
+#   1) GitHub 对免费仓库的 schedule cron 限流很重（实测 21 小时只跑了 2 次），
+#      所以改成「触发一次 → 在同一个 job 里连续循环 5.5 小时」，cron 只负责接上下一个循环。
+#   2) 发布不走 gh-pages 分支构建：那样有「每小时 10 次构建」的硬配额，
+#      每几分钟一推就会配额用完、Page build failed，线上数据冻住。
+#      改由 deploy.yml 用 Actions 部署（官方文档明确该配额不适用于 Actions 工作流）。
 
 on:
   schedule:
@@ -34,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: "Loop: collect → export → publish"
+      - name: "Loop: collect → commit data.db (deploy 由 deploy.yml 负责)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -43,31 +44,7 @@ jobs:
           git config user.name  "steam-monitor-bot"
           git config user.email "bot@users.noreply.github.com"
           export REPO_URL="https://github.com/$REPO"
-          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
           DEADLINE=$(( $(date +%s) + 19800 ))   # 5.5 小时后停止，给 job 留余量
-
-          publish() {
-            local d rc
-            d="$(mktemp -d)"
-            cp -a site/. "$d"/
-            (
-              cd "$d" || exit 1
-              git init -q
-              git config user.name  "steam-monitor-bot"
-              git config user.email "bot@users.noreply.github.com"
-              git checkout -q -b gh-pages
-              git add -A
-              git commit -q -m "site: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || true
-              for i in 1 2 3; do
-                git push -f -q "$REMOTE" gh-pages && exit 0
-                sleep 3
-              done
-              exit 1
-            )
-            rc=$?
-            rm -rf "$d"
-            return $rc
-          }
 
           round=0
           while [ "$(date +%s)" -lt "$DEADLINE" ]; do
@@ -85,15 +62,14 @@ jobs:
 
             git add data.db
             if ! git diff --staged --quiet; then
-              git commit -q -m "data: $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
+              git commit -q -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
               for i in 1 2 3; do
                 git pull --rebase --autostash -q origin main && git push -q && break
                 sleep 3
               done
             fi
 
-            publish && echo "published to gh-pages" || echo "publish failed"
             echo "::endgroup::"
-            sleep 170
+            sleep 230
           done
           echo "loop finished after $round rounds"
