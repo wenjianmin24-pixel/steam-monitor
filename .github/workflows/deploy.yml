@@ -1,0 +1,42 @@
+name: Deploy site
+
+# Pages 用 Actions 部署（build_type=workflow），不走 gh-pages 分支构建。
+# 原因：gh-pages 分支构建有「每小时最多 10 次」的硬限制，
+# 3 分钟一推会在跑满一小时后全部 Page build failed，线上数据就冻住。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["data.db", "index.html", "export.py", "collect.py"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Export static site
+        env:
+          REPO_URL: https://github.com/${{ github.repository }}
+        run: python export.py site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
