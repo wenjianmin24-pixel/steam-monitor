@@ -1,17 +1,18 @@
 name: Collect & Deploy
 
-# GitHub 对免费仓库的 schedule cron 限流严重（实测 21 小时只跑了 2 次），
-# 所以这里改成「触发一次后长时间循环」：
-#   每轮 抓取 → 导出 → 推 gh-pages，然后 sleep 3 分钟。
-# 单次 job 覆盖约 5 小时，配合每 6 小时的 cron 补充，更新延迟约 3–4 分钟。
+# 为什么这样写：
+#   GitHub 对免费仓库的 schedule cron 限流很重（实测 21 小时只跑了 2 次）。
+#   所以改成「触发一次 → 在同一个 job 里连续循环 5 个多小时」：
+#   每 3 分钟 抓取 → 导出 → 推 gh-pages，页面每 3 分钟自动拉一次最新数据。
+#   这样数据延迟从「几小时」降到「几分钟」，cron 只负责把循环接上。
 
 on:
   schedule:
-    - cron: "13 */6 * * *"
+    - cron: "7 */6 * * *"
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ["data.db"]
+    paths-ignore: ["data.db", "README.md"]
 
 permissions:
   contents: write
@@ -25,7 +26,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -43,23 +44,34 @@ jobs:
           git config user.email "bot@users.noreply.github.com"
           export REPO_URL="https://github.com/$REPO"
           REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          DEADLINE=$(( $(date +%s) + 19800 ))   # 5.5 小时后停止，给 job 留余量
 
           publish() {
-            local d; d="$(mktemp -d)"
+            local d rc
+            d="$(mktemp -d)"
             cp -a site/. "$d"/
-            ( cd "$d" && git init -q \
-              && git config user.name  "steam-monitor-bot" \
-              && git config user.email "bot@users.noreply.github.com" \
-              && git checkout -q -b gh-pages \
-              && git add -A \
-              && { git commit -q -m "site: $(date -u +'%Y-%m-%d %H:%M UTC')" || true; } \
-              && { for i in 1 2 3; do git push -f -q "$REMOTE" gh-pages && exit 0; sleep 4; done; exit 1; } )
-            local rc=$?
+            (
+              cd "$d" || exit 1
+              git init -q
+              git config user.name  "steam-monitor-bot"
+              git config user.email "bot@users.noreply.github.com"
+              git checkout -q -b gh-pages
+              git add -A
+              git commit -q -m "site: $(date -u +'%Y-%m-%dT%H:%M:%SZ')" || true
+              for i in 1 2 3; do
+                git push -f -q "$REMOTE" gh-pages && exit 0
+                sleep 3
+              done
+              exit 1
+            )
+            rc=$?
             rm -rf "$d"
             return $rc
           }
 
-          for round in $(seq 1 60); do
+          round=0
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            round=$((round + 1))
             echo "::group::round $round  $(date -u +%H:%M:%S UTC)"
             python collect.py all || echo "collect failed, continuing"
             python export.py site  || echo "export failed, continuing"
@@ -70,11 +82,12 @@ jobs:
               git commit -q -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
               for i in 1 2 3; do
                 git pull --rebase --autostash -q origin main && git push -q && break
-                sleep 4
+                sleep 3
               done
             fi
 
             publish && echo "published to gh-pages" || echo "publish failed"
             echo "::endgroup::"
-            sleep 180
+            sleep 170
           done
+          echo "loop finished after $round rounds"
